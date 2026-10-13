@@ -1,0 +1,29 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+
+# ---- 密钥（绝不能进 git）----
+.env
+.env.local
+
+# ---- 运行时产物 ----
+output/
+*.log
+
+# ---- 本地仓库克隆残留（空的 GitHub 克隆副本，不纳入本项目仓库）----
+DeepSearchAgent/
+
+# ---- 学习文档（本地参考，不上传）----
+learning/
+
+# ---- IDE / OS ----
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
