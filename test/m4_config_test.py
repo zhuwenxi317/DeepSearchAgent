@@ -20,7 +20,7 @@ from agent.main_agent import main_agent
 
 
 async def run():
-    question = "你好，请用一句话介绍一下你自己和你所在的团队。"
+    question = "你好，请用一句话介绍一下你自己和你所在的团队，查一下上海的天气"
     print(f"问题：{question}")
     print()
 
