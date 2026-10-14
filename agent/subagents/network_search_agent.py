@@ -1,8 +1,12 @@
+from agent.prompts import sub_agents_content
 from tools.tavily_tool import internet_search
 
+# 提示词相关字段从 YAML 读，工具是代码（有行为，不是文案），留在代码里
+_network_search_config = sub_agents_content["network_search"]
+
 network_search_agent = {
-    "name": "网络搜索助手",
-    "description": "负责从互联网搜索公开信息。当用户需要了解最新资讯、新闻、趋势等需要联网查询的信息时，使用这个助手。",
-    "system_prompt": "你是一个网络搜索专家。根据用户的问题进行搜索，并把搜索结果整理归纳成简洁准确的回答。",
+    "name": _network_search_config["name"],
+    "description": _network_search_config["description"],
+    "system_prompt": _network_search_config["system_prompt"],
     "tools": [internet_search],
 }
