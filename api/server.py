@@ -96,19 +96,31 @@ def _load_main_agent():
     return _main_agent
 
 
-async def execute_deep_agent(query: str, thread_id: str, session_dir: Path):
+async def execute_deep_agent(query: str, thread_id: str, run_id: str, session_dir: Path):
     """后台执行 agent 任务。
 
     「延迟导入」——不在模块顶部 import agent.main_agent。
     否则一启动 server 就要初始化模型（慢、且强制要求 .env 齐全）。
     但延迟导入的代价是"第一个请求付账"，所以必须用 to_thread 挪出事件循环。
     """
-    from api.context import set_session_context
+    from api.context import (
+        reset_run_context,
+        reset_session_context,
+        reset_thread_context,
+        set_run_context,
+        set_session_context,
+        set_thread_context,
+    )
 
     main_agent = await asyncio.to_thread(_load_main_agent)
 
-    session_dir.mkdir(parents=True, exist_ok=True)
-    set_session_context(str(session_dir))
+    # 不在这里建目录：真正写文件的工具（generate_markdown）内部会按需 mkdir。
+    # 提前建会给纯问答任务留下一堆空目录。
+
+    # ★ set 返回 Token，收好——finally 里用它精确恢复，避免污染同一 Task 的后续执行
+    token_thread = set_thread_context(thread_id)
+    token_run = set_run_context(run_id)
+    token_session = set_session_context(str(session_dir))
 
     config = {"configurable": {"thread_id": thread_id}}
     print(f"[{thread_id}] 开始执行：{query}")
@@ -121,6 +133,11 @@ async def execute_deep_agent(query: str, thread_id: str, session_dir: Path):
     except Exception as e:
         # 后台任务没人接异常，必须自己吞掉并记录，否则异常会被静默丢弃
         print(f"[{thread_id}] 失败：{type(e).__name__}: {e}")
+    finally:
+        # 必须放 finally：中途抛异常也要恢复上下文
+        reset_session_context(token_session)
+        reset_run_context(token_run)
+        reset_thread_context(token_thread)
 
 
 @app.post("/api/task")
@@ -133,7 +150,9 @@ async def run_task(request: TaskRequest):
     #   客户端永远等不到结果、也收不到 400
     session_dir = session_dir_of(thread_id)
 
-    task = asyncio.create_task(execute_deep_agent(request.query, thread_id, session_dir))
+    task = asyncio.create_task(
+        execute_deep_agent(request.query, thread_id, run_id, session_dir)
+    )
     _running_tasks.add(task)                    # 先强引用
     task.add_done_callback(_running_tasks.discard)  # 跑完自动摘掉，防止集合无限增长
 
