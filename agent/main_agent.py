@@ -2,18 +2,19 @@ from deepagents import create_deep_agent
 from langgraph.checkpoint.memory import InMemorySaver
 
 from agent.llm import model
-from agent.subagents.translate_agent import translate_agent
-from agent.subagents.weather_agent import weather_agent
+from agent.subagents.network_search_agent import network_search_agent
+from tools.markdown_tools import generate_markdown
 
 main_agent = create_deep_agent(
     model=model,
     system_prompt=(
-        "你是团队负责人。根据用户的问题判断该交给哪位助手：\n"
-        "- 天气助手：查询城市天气\n"
-        "- 翻译助手：翻译文本\n"
-        "如果问题不需要任何助手（比如简单计算），就自己直接回答。"
+        "你是团队负责人，负责协调完成用户的请求。你可以：\n"
+        "- 委派给网络搜索助手：搜索互联网上的最新信息\n"
+        "- 用 generate_markdown 工具：把内容写成 Markdown 报告文件\n"
+        "典型流程：当用户要求研究某个主题并生成报告时，先委派网络搜索助手收集信息，"
+        "再根据搜索结果用 generate_markdown 生成报告文件。"
     ),
-    tools=[],  # 主智能体自己的工具，M2 先留空
+    tools=[generate_markdown],  # 主智能体自己的工具：生成报告
     checkpointer=InMemorySaver(),
-    subagents=[weather_agent, translate_agent],
+    subagents=[network_search_agent],
 )

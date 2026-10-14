@@ -58,9 +58,8 @@ async def run_question(question: str, thread_id: str):
 
 
 async def main():
-    await run_question("北京天气怎么样？", "t-weather")
-    await run_question("把'你好世界'翻译成英语", "t-translate")
-    await run_question("1+1 等于几？", "t-math")
+    await run_question("帮我查一下26年10月12日的一个新闻，简单总结就好", thread_id="weather")
+
 
 
 if __name__ == "__main__":
