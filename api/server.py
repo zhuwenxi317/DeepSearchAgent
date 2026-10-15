@@ -18,10 +18,12 @@ from typing import Optional
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.stdout.reconfigure(encoding="utf-8")
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
+
+from api.connection_manager import manager
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 OUTPUT_DIR = (PROJECT_ROOT / "output").resolve()
@@ -79,6 +81,20 @@ class TaskRequest(BaseModel):
     thread_id: Optional[str] = None
 
 
+def _get_messages(state) -> list:
+    """从 astream 的节点更新里安全取出 messages。
+
+    deepagents 的中间件节点（PatchToolCalls、TodoList）产出的是 None 或
+    Overwrite 对象，直接 state["messages"] 会炸，所以统一在这里兜住。
+    """
+    if state is None or not isinstance(state, dict):
+        return []
+    m = state.get("messages", [])
+    if type(m).__name__ == "Overwrite":
+        m = m.value
+    return m if isinstance(m, list) else []
+
+
 _main_agent = None
 
 
@@ -125,14 +141,41 @@ async def execute_deep_agent(query: str, thread_id: str, run_id: str, session_di
     config = {"configurable": {"thread_id": thread_id}}
     print(f"[{thread_id}] 开始执行：{query}")
 
-    try:
-        result = await main_agent.ainvoke(
-            {"messages": [("human", query)]}, config=config
+    async def emit(message: str) -> None:
+        """往这个 thread 的所有前端连接推一条进度。没人连着就是空操作。"""
+        await manager.broadcast_event(
+            thread_id, {"type": "progress", "run_id": run_id, "message": message}
         )
-        print(f"[{thread_id}] 完成：{result['messages'][-1].content[:120]}")
+
+    try:
+        await emit("任务开始")
+
+        # 从 ainvoke 换成 astream：一次只处理一个节点，边跑边播报。
+        # 逐个 chunk 是 {节点名: 该节点的状态更新}。
+        final_text = ""
+        async for chunk in main_agent.astream(
+            {"messages": [("human", query)]}, config=config
+        ):
+            for _node_name, update in chunk.items():
+                for msg in _get_messages(update):
+                    tool_calls = getattr(msg, "tool_calls", None) or []
+                    if tool_calls:
+                        for tc in tool_calls:
+                            if tc["name"] == "task":
+                                await emit(f"委派给子智能体「{tc['args'].get('subagent_type')}」")
+                            else:
+                                await emit(f"调用工具 {tc['name']}")
+                    else:
+                        content = getattr(msg, "content", "")
+                        if content:
+                            final_text = content
+
+        await emit("任务完成")
+        print(f"[{thread_id}] 完成：{final_text[:120]}")
     except Exception as e:
         # 后台任务没人接异常，必须自己吞掉并记录，否则异常会被静默丢弃
         print(f"[{thread_id}] 失败：{type(e).__name__}: {e}")
+        await emit(f"任务失败：{type(e).__name__}: {e}")
     finally:
         # 必须放 finally：中途抛异常也要恢复上下文
         reset_session_context(token_session)
@@ -218,6 +261,37 @@ async def upload_file(thread_id: str, file: UploadFile = File(...)):
             f.write(chunk)
 
     return {"status": "uploaded", "filename": safe_name, "size": size}
+
+
+@app.websocket("/ws/{thread_id}")
+async def websocket_endpoint(
+    websocket: WebSocket,
+    thread_id: str,
+    run_id: Optional[str] = None,
+    # 断线重连时带上"我最后收到的事件序号"，后端补发之后的历史。
+    # M7 先留出这个参数（前端契约），补发逻辑在 M8 有了事件存储之后实现。
+    after_sequence: int = 0,
+):
+    """前端连上这条长连接，就能实时收到这个 thread 的进度。
+
+    这个函数【不会立刻返回】——它一直挂在 receive_text() 上等客户端说话，
+    直到客户端断开才结束。这是 WebSocket 端点与 HTTP 端点最大的写法差别。
+    """
+    await manager.connect(websocket, thread_id, run_id)
+    print(f"[WS] {thread_id} 已连接（run_id={run_id}）")
+
+    try:
+        while True:
+            # 挂在这里等客户端发消息。它同时也是"保持连接活着"的机制：
+            # 客户端定时发 ping，我们回 pong，中间的代理/防火墙才不会掐断长连接。
+            data = await websocket.receive_text()
+            await websocket.send_json({"type": "pong", "echo": data})
+    except WebSocketDisconnect:
+        # 客户端主动断开（关页面/断网）时，receive_text 抛这个异常
+        print(f"[WS] {thread_id} 已断开")
+    finally:
+        # 不管正常断开还是异常退出，都要从名册上摘掉（disconnect 是幂等的）
+        manager.disconnect(thread_id, websocket)
 
 
 if __name__ == "__main__":
