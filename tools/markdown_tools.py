@@ -3,9 +3,11 @@ from typing import Annotated
 from langchain_core.tools import tool
 
 from api.context import get_session_context
+from api.monitor import monitor
 from utils.path_utils import resolve_path
 
 
+@monitor.traced_tool("生成Markdown")
 @tool
 def generate_markdown(
     content: Annotated[str, "要写入文档的文本内容"],

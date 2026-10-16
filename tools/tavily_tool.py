@@ -6,12 +6,15 @@ from tavily import TavilyClient
 
 import os
 
+from api.monitor import monitor
+
 # 确保读到 .env 里的 TAVILY_API_KEY
 load_dotenv(find_dotenv())
 
 tavily_client = TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
 
 
+@monitor.traced_tool("网络搜索工具")
 @tool
 def internet_search(
     query: str,

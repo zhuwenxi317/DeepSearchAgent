@@ -24,6 +24,8 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from api.connection_manager import manager
+from api.monitor import monitor
+from api.trace_models import TraceEvent, TraceEventType
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 OUTPUT_DIR = (PROJECT_ROOT / "output").resolve()
@@ -120,9 +122,15 @@ async def execute_deep_agent(query: str, thread_id: str, run_id: str, session_di
     但延迟导入的代价是"第一个请求付账"，所以必须用 to_thread 挪出事件循环。
     """
     from api.context import (
+        reset_agent_context,
+        reset_entity_context,
+        reset_parent_context,
         reset_run_context,
         reset_session_context,
         reset_thread_context,
+        set_agent_context,
+        set_entity_context,
+        set_parent_context,
         set_run_context,
         set_session_context,
         set_thread_context,
@@ -138,6 +146,15 @@ async def execute_deep_agent(query: str, thread_id: str, run_id: str, session_di
     token_run = set_run_context(run_id)
     token_session = set_session_context(str(session_dir))
 
+    # 事件树的两个根节点：run 是根，主 agent 挂在 run 下
+    run_entity_id = str(uuid.uuid4())
+    main_entity_id = str(uuid.uuid4())
+
+    # 主 agent 执行期间，工具埋点读 entity_id 作为 parent_id，挂到主 agent 下
+    token_entity = set_entity_context(main_entity_id)
+    token_parent = set_parent_context(run_entity_id)
+    token_agent = set_agent_context("main")
+
     config = {"configurable": {"thread_id": thread_id}}
     print(f"[{thread_id}] 开始执行：{query}")
 
@@ -150,9 +167,28 @@ async def execute_deep_agent(query: str, thread_id: str, run_id: str, session_di
     try:
         await emit("任务开始")
 
+        # 埋 run / 主 agent 的 STARTED（monitor.emit 内部先存后广播）
+        await monitor.emit(TraceEvent(
+            thread_id=thread_id, run_id=run_id,
+            event=TraceEventType.RUN_STARTED,
+            entity_id=run_entity_id, name="main",
+        ))
+        await monitor.emit(TraceEvent(
+            thread_id=thread_id, run_id=run_id,
+            event=TraceEventType.AGENT_STARTED,
+            entity_id=main_entity_id, parent_id=run_entity_id, name="main",
+        ))
+
         # 从 ainvoke 换成 astream：一次只处理一个节点，边跑边播报。
-        # 逐个 chunk 是 {节点名: 该节点的状态更新}。
+        # 工具调用由 @traced_tool 装饰器自动埋点（tool 事件）。
+        # 子智能体的 agent 事件在这里【手工埋】：model 节点看到 task 调用 → STARTED，
+        # tools 节点看到 task 返回（ToolMessage）→ COMPLETED。
+        # 注意：子智能体内部的工具事件，parent 会挂到主 agent（不是子智能体），
+        # 因为子智能体在同一个 Task 里 await 执行，entity ContextVar 不会切换。
+        # 这是 LangGraph Context 传播的边界，接受这个瑕疵（不影响回放核心信息）。
         final_text = ""
+        subagent_runs: dict[str, tuple[str, str]] = {}  # task 的 tool_call_id -> (entity_id, 名字)
+
         async for chunk in main_agent.astream(
             {"messages": [("human", query)]}, config=config
         ):
@@ -160,15 +196,45 @@ async def execute_deep_agent(query: str, thread_id: str, run_id: str, session_di
                 for msg in _get_messages(update):
                     tool_calls = getattr(msg, "tool_calls", None) or []
                     if tool_calls:
+                        # AIMessage：模型决定调工具
                         for tc in tool_calls:
                             if tc["name"] == "task":
-                                await emit(f"委派给子智能体「{tc['args'].get('subagent_type')}」")
+                                sub_name = tc["args"].get("subagent_type", "子智能体")
+                                sub_entity = str(uuid.uuid4())
+                                subagent_runs[tc["id"]] = (sub_entity, sub_name)
+                                await emit(f"委派给子智能体「{sub_name}」")
+                                await monitor.emit(TraceEvent(
+                                    thread_id=thread_id, run_id=run_id,
+                                    event=TraceEventType.AGENT_STARTED,
+                                    entity_id=sub_entity, parent_id=main_entity_id, name=sub_name,
+                                ))
                             else:
                                 await emit(f"调用工具 {tc['name']}")
                     else:
+                        # ToolMessage：工具返回。若是 task 返回，埋子智能体 COMPLETED。
+                        tool_call_id = getattr(msg, "tool_call_id", None)
+                        if tool_call_id in subagent_runs:
+                            sub_entity, sub_name = subagent_runs.pop(tool_call_id)
+                            await monitor.emit(TraceEvent(
+                                thread_id=thread_id, run_id=run_id,
+                                event=TraceEventType.AGENT_COMPLETED,
+                                entity_id=sub_entity, parent_id=main_entity_id, name=sub_name,
+                            ))
                         content = getattr(msg, "content", "")
                         if content:
                             final_text = content
+
+        # 埋 run / 主 agent 的 COMPLETED
+        await monitor.emit(TraceEvent(
+            thread_id=thread_id, run_id=run_id,
+            event=TraceEventType.AGENT_COMPLETED,
+            entity_id=main_entity_id, parent_id=run_entity_id, name="main",
+        ))
+        await monitor.emit(TraceEvent(
+            thread_id=thread_id, run_id=run_id,
+            event=TraceEventType.RUN_COMPLETED,
+            entity_id=run_entity_id, name="main",
+        ))
 
         await emit("任务完成")
         print(f"[{thread_id}] 完成：{final_text[:120]}")
@@ -176,8 +242,17 @@ async def execute_deep_agent(query: str, thread_id: str, run_id: str, session_di
         # 后台任务没人接异常，必须自己吞掉并记录，否则异常会被静默丢弃
         print(f"[{thread_id}] 失败：{type(e).__name__}: {e}")
         await emit(f"任务失败：{type(e).__name__}: {e}")
+        await monitor.emit(TraceEvent(
+            thread_id=thread_id, run_id=run_id,
+            event=TraceEventType.RUN_FAILED,
+            entity_id=run_entity_id, name="main",
+            data={"error": f"{type(e).__name__}: {e}"},
+        ))
     finally:
         # 必须放 finally：中途抛异常也要恢复上下文
+        reset_agent_context(token_agent)
+        reset_parent_context(token_parent)
+        reset_entity_context(token_entity)
         reset_session_context(token_session)
         reset_run_context(token_run)
         reset_thread_context(token_thread)

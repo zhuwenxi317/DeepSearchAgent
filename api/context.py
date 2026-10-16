@@ -20,6 +20,16 @@ _run_id_ctx: ContextVar[str | None] = ContextVar("run_id", default=None)
 # 当前会话的工作目录（output/session_{thread_id}/）。工具靠它知道文件写到哪。
 _session_dir_ctx: ContextVar[str | None] = ContextVar("session_dir", default=None)
 
+# 当前实体的 id（执行期间 = 当前正在跑的 agent 的 entity_id）。
+# 工具埋点时读它作为自己的 parent_id，从而把事件挂到正确的 agent 下面。
+_entity_id_ctx: ContextVar[str | None] = ContextVar("entity_id", default=None)
+
+# 当前实体的父实体 id（agent 的父 = run，子 agent 的父 = 主 agent）。
+_parent_id_ctx: ContextVar[str | None] = ContextVar("parent_id", default=None)
+
+# 当前 agent 的名字（"main" 或子 agent 名）。
+_agent_id_ctx: ContextVar[str | None] = ContextVar("agent_id", default=None)
+
 
 def set_thread_context(thread_id: str) -> Token:
     return _thread_id_ctx.set(thread_id)
@@ -55,3 +65,39 @@ def get_session_context() -> str | None:
 
 def reset_session_context(token: Token) -> None:
     _session_dir_ctx.reset(token)
+
+
+def set_entity_context(entity_id: str) -> Token:
+    return _entity_id_ctx.set(entity_id)
+
+
+def get_entity_context() -> str | None:
+    return _entity_id_ctx.get()
+
+
+def reset_entity_context(token: Token) -> None:
+    _entity_id_ctx.reset(token)
+
+
+def set_parent_context(parent_id: str) -> Token:
+    return _parent_id_ctx.set(parent_id)
+
+
+def get_parent_context() -> str | None:
+    return _parent_id_ctx.get()
+
+
+def reset_parent_context(token: Token) -> None:
+    _parent_id_ctx.reset(token)
+
+
+def set_agent_context(agent_id: str) -> Token:
+    return _agent_id_ctx.set(agent_id)
+
+
+def get_agent_context() -> str | None:
+    return _agent_id_ctx.get()
+
+
+def reset_agent_context(token: Token) -> None:
+    _agent_id_ctx.reset(token)
