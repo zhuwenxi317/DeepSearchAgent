@@ -9,6 +9,7 @@ from uuid import uuid4
 from api.connection_manager import manager
 from api.context import get_entity_context, get_run_context, get_thread_context
 from api.trace_models import TraceEvent, TraceEventType
+from api.trace_serializer import sanitize_for_trace
 from api.trace_store import trace_store
 
 
@@ -74,7 +75,12 @@ class ToolMonitor:
         return decorator
 
     async def emit(self, event: TraceEvent) -> None:
-        """先存后广播——能广播出去的事件，一定已经存下来了（断点续传的根基）。"""
+        """先脱敏 → 再存 → 再广播。
+
+        脱敏在最前面（方案 A）：敏感信息根本不进 trace_store，也不进广播。
+        顺序铁律：能广播出去的事件，一定已经存下来了（断点续传的根基）。
+        """
+        event.data = sanitize_for_trace(event.data)
         trace_store.append(event)
         await manager.broadcast_event(event.thread_id, event.model_dump(mode="json"))
 

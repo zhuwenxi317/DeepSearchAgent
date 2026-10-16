@@ -26,11 +26,13 @@ from pydantic import BaseModel
 from api.connection_manager import manager
 from api.monitor import monitor
 from api.trace_models import TraceEvent, TraceEventType
+from api.trace_router import router as trace_router
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 OUTPUT_DIR = (PROJECT_ROOT / "output").resolve()
 
 app = FastAPI(title="DeepSearchPro API")
+app.include_router(trace_router)
 
 # CORS：允许浏览器从其它源（端口）访问本服务。开发期放开，生产要收紧成白名单。
 app.add_middleware(
