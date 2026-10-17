@@ -38,13 +38,14 @@ export async function uploadFiles(threadId, files) {
   return uploaded;
 }
 
-export async function startTask(query, threadId) {
+export async function startTask(query, threadId, files = []) {
   return parseResponse(await fetch("/api/task", {
     method: "POST",
     headers: JSON_HEADERS,
     body: JSON.stringify({
       query,
       thread_id: threadId,
+      files,
     }),
   }));
 }

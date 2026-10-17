@@ -5,24 +5,8 @@ from langchain_core.tools import tool
 
 from api.context import get_session_context
 from api.monitor import monitor
-from utils.path_utils import resolve_path
+from utils.path_utils import resolve_in_session
 from utils.word_converter import convert_md_to_pdf_via_word
-
-
-def _resolve_in_session(session_dir: str, value: str, suffix: str) -> Path | None:
-    """把模型给的路径收敛到会话目录内，并强制目标扩展名。"""
-    value = (value or "").strip().replace("\\", "/")
-    if not value:
-        return None
-
-    segments = [seg for seg in value.split("/") if seg]
-    name = segments[-1]
-    subdir = "/".join(segments[:-1])
-
-    target = resolve_path(session_dir, subdir, name)
-    if target.suffix.lower() != suffix:
-        target = target.with_suffix(suffix)
-    return target
 
 
 @monitor.traced_tool("Markdown转PDF工具")
@@ -46,14 +30,14 @@ def convert_md_to_pdf(
         if not session_dir:
             return "转换失败：当前没有设置会话目录（session_dir 未初始化）。"
 
-        md_path = _resolve_in_session(session_dir, md_filename, ".md")
+        md_path = resolve_in_session(session_dir, md_filename, ".md")
         if md_path is None:
             return "转换失败：md_filename 不能为空。"
         if not md_path.is_file():
             return f"转换失败：文件不存在 {md_path.name}"
 
         if pdf_filename.strip():
-            pdf_path = _resolve_in_session(session_dir, pdf_filename, ".pdf")
+            pdf_path = resolve_in_session(session_dir, pdf_filename, ".pdf")
         else:
             pdf_path = md_path.with_suffix(".pdf")
         pdf_path.parent.mkdir(parents=True, exist_ok=True)

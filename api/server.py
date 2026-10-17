@@ -114,6 +114,9 @@ class TaskRequest(BaseModel):
 
     query: str
     thread_id: Optional[str] = None
+    # 本次上传的文件名（前端先调 /api/upload，再把名字带过来）。
+    # 后端把它拼进给模型的输入，否则模型只知道问题、不知道有附件。
+    files: list[str] = []
 
 
 def _get_messages(state) -> list:
@@ -147,7 +150,13 @@ def _load_main_agent():
     return _main_agent
 
 
-async def execute_deep_agent(query: str, thread_id: str, run_id: str, session_dir: Path):
+async def execute_deep_agent(
+    query: str,
+    thread_id: str,
+    run_id: str,
+    session_dir: Path,
+    uploaded_files: list[str] | None = None,
+):
     """后台执行 agent 任务。
 
     「延迟导入」——不在模块顶部 import agent.main_agent。
@@ -191,6 +200,19 @@ async def execute_deep_agent(query: str, thread_id: str, run_id: str, session_di
     config = {"configurable": {"thread_id": thread_id}}
     print(f"[{thread_id}] 开始执行：{query}")
 
+    # 把上传文件清单拼进给模型的输入。
+    # 文件名来自客户端，只取最后一段并限长——提示词里也不该无条件信任外部字符串。
+    human_text = query
+    if uploaded_files:
+        names = [Path(name).name[:200] for name in uploaded_files if name][:20]
+        if names:
+            human_text = (
+                "本次会话已上传以下文件（位于当前会话工作目录）：\n"
+                + "\n".join(f"- {name}" for name in names)
+                + "\n如果问题涉及这些文件，请先调用 read_file_content 读取内容。\n\n"
+                + query
+            )
+
     async def emit(message: str) -> None:
         """往这个 thread 的所有前端连接推一条进度。没人连着就是空操作。"""
         await manager.broadcast_event(
@@ -224,7 +246,7 @@ async def execute_deep_agent(query: str, thread_id: str, run_id: str, session_di
         subagent_runs: dict[str, tuple[str, str]] = {}  # task 的 tool_call_id -> (entity_id, 名字)
 
         async for chunk in main_agent.astream(
-            {"messages": [("human", query)]}, config=config
+            {"messages": [("human", human_text)]}, config=config
         ):
             for _node_name, update in chunk.items():
                 for msg in _get_messages(update):
@@ -304,7 +326,9 @@ async def run_task(request: TaskRequest):
     session_dir = session_dir_of(thread_id)
 
     task = asyncio.create_task(
-        execute_deep_agent(request.query, thread_id, run_id, session_dir)
+        execute_deep_agent(
+            request.query, thread_id, run_id, session_dir, request.files
+        )
     )
     _running_tasks.add(task)                    # 先强引用
     task.add_done_callback(_running_tasks.discard)  # 跑完自动摘掉，防止集合无限增长

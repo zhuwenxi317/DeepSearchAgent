@@ -4,6 +4,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from agent.llm import model
 from agent.prompts import main_agent_content
 from agent.subagents.network_search_agent import build_network_search_agent
+from tools.file_read_tool import read_file_content
 from tools.markdown_tools import generate_markdown
 from tools.pdf_tools import convert_md_to_pdf
 
@@ -25,7 +26,7 @@ if not _subagents:
 main_agent = create_deep_agent(
     model=model,
     system_prompt=_system_prompt,
-    tools=[generate_markdown, convert_md_to_pdf],
+    tools=[generate_markdown, convert_md_to_pdf, read_file_content],
     checkpointer=InMemorySaver(),
     subagents=_subagents,
 )

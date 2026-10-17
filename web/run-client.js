@@ -32,7 +32,12 @@ export class RunClient {
       if (generation !== this.operationGeneration) return null;
     }
     this.store.setTaskStatus("starting");
-    const response = await startTask(query, threadId);
+    // 把文件名一并传给后端：模型需要知道"有附件"，否则只会看到问题文本
+    const response = await startTask(
+      query,
+      threadId,
+      files.map((file) => file.name),
+    );
     if (generation !== this.operationGeneration) return null;
     if (!response.run_id || !response.thread_id) {
       throw new Error("任务响应缺少 thread_id 或 run_id。");

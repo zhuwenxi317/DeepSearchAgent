@@ -36,3 +36,25 @@ def resolve_path(session_dir: str, path: str = "", filename: str = "") -> Path:
         target = session / target.name
 
     return target
+
+
+def resolve_in_session(
+    session_dir: str, value: str, suffix: str | None = None
+) -> Path | None:
+    """把模型给的单个路径字符串收敛到会话目录内，可选强制扩展名。
+
+    先按 / 切成"子目录 + 文件名"，再交给 resolve_path 做穿越清洗；
+    路径为空时返回 None（由调用方决定怎么报错）。
+    """
+    value = (value or "").strip().replace("\\", "/")
+    if not value:
+        return None
+
+    segments = [seg for seg in value.split("/") if seg]
+    name = segments[-1]
+    subdir = "/".join(segments[:-1])
+
+    target = resolve_path(session_dir, subdir, name)
+    if suffix and target.suffix.lower() != suffix:
+        target = target.with_suffix(suffix)
+    return target
