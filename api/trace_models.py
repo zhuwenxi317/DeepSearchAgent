@@ -57,4 +57,8 @@ class TraceEvent(BaseModel):
     timestamp: str = Field(default_factory=_now_iso)
     duration_ms: int | None = None       # 只有 completed/failed 时才填
 
+    # run_completed 时携带最终答案，供前端直接渲染。
+    # 放在顶层而不是 data 里：data 会经过脱敏/截断（500 字），会把报告截掉。
+    output: str | None = None
+
     data: dict = Field(default_factory=dict)   # 附加信息：工具参数 / 错误 / 结果摘要

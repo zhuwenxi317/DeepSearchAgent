@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#f6f7f8">
+  <meta name="description" content="DeepSearchPro 运行追踪与诊断">
+  <title>运行详情 - DeepSearchPro</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <link rel="stylesheet" href="/static/styles.css">
+  <link rel="stylesheet" href="/static/trace.css">
+</head>
+<body>
+  <a class="skip-link" href="#main-content">跳到运行详情</a>
+  <div class="app-shell trace-shell">
+    <aside class="sidebar trace-sidebar" aria-label="页面导航">
+      <div class="sidebar-brand">
+        <a class="brand" href="/" aria-label="DeepSearchPro 首页">
+          <span class="brand-mark" aria-hidden="true">DS</span>
+          <span><strong>DeepSearchPro</strong><small>Research workspace</small></span>
+        </a>
+      </div>
+      <nav class="trace-navigation" aria-label="主要页面">
+        <a id="chat-link" href="/">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z"/></svg>
+          <span>对话</span>
+        </a>
+        <a class="active" href="/trace" aria-current="page">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 16V9m5 7V6m5 10v-4"/></svg>
+          <span>运行追踪</span>
+        </a>
+      </nav>
+      <div class="trace-sidebar-note">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span>追踪协议 1.0</span>
+      </div>
+    </aside>
+
+    <main class="trace-workspace" id="main-content">
+      <header class="topbar trace-topbar">
+        <div class="topbar-title">
+          <div>
+            <h1 id="run-title">运行详情</h1>
+            <code>诊断视图</code>
+          </div>
+        </div>
+        <div class="topbar-actions">
+          <div class="connection-label" id="connection-pill" data-status="idle">
+            <i aria-hidden="true"></i>
+            <span id="connection-label">暂无运行</span>
+          </div>
+          <div class="trace-id-chip">
+            <span>Thread</span>
+            <code id="thread-id">-</code>
+          </div>
+          <button class="icon-button" id="copy-thread" type="button"
+                  aria-label="复制线程 ID" title="复制线程 ID">
+            <svg aria-hidden="true" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          </button>
+          <button class="trace-button" id="new-session" type="button">新建会话</button>
+        </div>
+      </header>
+
+      <div class="trace-scroll">
+        <div class="trace-content">
+          <section class="run-summary" aria-labelledby="summary-title">
+            <header class="section-heading summary-heading">
+              <div>
+                <span class="eyebrow">任务控制</span>
+                <h2 id="summary-title">运行任务</h2>
+              </div>
+              <div class="run-id-label">Run <code id="run-id">-</code></div>
+            </header>
+
+            <div class="task-controls">
+              <div class="query-field">
+                <label id="task-label" for="task-input">研究问题</label>
+                <textarea id="task-input" name="query" rows="3" maxlength="12000" autocomplete="off"
+                          placeholder="输入需要追踪执行过程的问题…"></textarea>
+              </div>
+              <label class="upload-zone" id="upload-zone" for="file-input" tabindex="0">
+                <input id="file-input" name="files" type="file" multiple hidden>
+                <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3v12m0-12 4 4m-4-4L8 7"/><path d="M5 14v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/></svg>
+                <span><strong>添加参考文件</strong><small id="upload-meta">拖放文件或点击选择</small></span>
+              </label>
+              <div class="run-actions">
+                <div>
+                  <span>任务状态</span>
+                  <strong class="task-state" id="task-state" data-status="idle">空闲</strong>
+                </div>
+                <button class="run-button" id="run-button" type="button">运行检索</button>
+              </div>
+            </div>
+
+            <div class="metrics" aria-label="运行指标">
+              <div class="metric"><span>耗时</span><strong id="metric-elapsed">-</strong></div>
+              <div class="metric"><span>调用记录</span><strong id="metric-events">0</strong></div>
+              <div class="metric"><span>活跃角色</span><strong id="metric-agent">-</strong></div>
+              <div class="metric"><span>工具调用</span><strong id="metric-tools">0</strong></div>
+              <div class="metric"><span>生成文件</span><strong id="metric-files">0</strong></div>
+              <div class="metric"><span>连接</span><strong id="metric-connection">空闲</strong></div>
+            </div>
+          </section>
+
+          <section class="roles-section" aria-labelledby="roles-title">
+            <header class="section-heading">
+              <div><span class="eyebrow">执行角色</span><h2 id="roles-title">执行角色</h2></div>
+              <span class="count-badge" id="active-role-count">0 个活跃</span>
+            </header>
+            <nav class="role-summary" id="role-summary" aria-label="执行角色状态">
+              <button class="role-item selected" type="button" data-role="main">
+                <span class="role-index">01</span><span class="role-main"><strong>主智能体</strong><small data-agent-event>未观察到事件</small></span>
+                <span class="badge" data-agent-status>Idle</span><span class="role-meta"><span data-agent-availability>状态未报告</span><span data-agent-count>0 次触发</span></span>
+              </button>
+              <button class="role-item" type="button" data-role="network">
+                <span class="role-index">02</span><span class="role-main"><strong>网络搜索</strong><small data-agent-event>未观察到事件</small></span>
+                <span class="badge" data-agent-status>Idle</span><span class="role-meta"><span data-agent-availability>状态未报告</span><span data-agent-count>0 次触发</span></span>
+              </button>
+              <button class="role-item" type="button" data-role="database">
+                <span class="role-index">03</span><span class="role-main"><strong>数据库查询</strong><small data-agent-event>未观察到事件</small></span>
+                <span class="badge" data-agent-status>Idle</span><span class="role-meta"><span data-agent-availability>状态未报告</span><span data-agent-count>0 次触发</span></span>
+              </button>
+              <button class="role-item" type="button" data-role="knowledge">
+                <span class="role-index">04</span><span class="role-main"><strong>知识库</strong><small data-agent-event>未观察到事件</small></span>
+                <span class="badge" data-agent-status>Idle</span><span class="role-meta"><span data-agent-availability>状态未报告</span><span data-agent-count>0 次触发</span></span>
+              </button>
+              <button class="role-item" type="button" data-role="files">
+                <span class="role-index">05</span><span class="role-main"><strong>报告文件</strong><small data-agent-event>未观察到事件</small></span>
+                <span class="badge" data-agent-status>Idle</span><span class="role-meta"><span data-agent-availability>状态未报告</span><span data-agent-count>0 次触发</span></span>
+              </button>
+            </nav>
+          </section>
+
+          <section class="execution-section" aria-labelledby="execution-title">
+            <header class="section-heading execution-heading">
+              <div><span class="eyebrow">观测拓扑</span><h2 id="execution-title">执行流程</h2></div>
+              <div class="graph-controls" aria-label="流程图缩放">
+                <button class="icon-button" id="graph-zoom-out" type="button" aria-label="缩小流程图" title="缩小流程图">
+                  <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3M8 11h6"/></svg>
+                </button>
+                <button class="zoom-label" id="graph-fit" type="button" title="适应窗口">适应</button>
+                <button class="icon-button" id="graph-zoom-in" type="button" aria-label="放大流程图" title="放大流程图">
+                  <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3M11 8v6m-3-3h6"/></svg>
+                </button>
+              </div>
+            </header>
+
+            <div class="graph-frame">
+              <div class="graph-viewport" id="graph-viewport">
+                <div class="graph-stage" id="graph-stage">
+                  <div class="graph" id="execution-graph">
+                    <svg class="graph-edges" id="graph-edges" aria-hidden="true"></svg>
+                    <button class="graph-node node-input" type="button" data-node="input" data-status="idle"><span class="node-kicker">Input</span><strong>用户请求</strong><span class="node-detail">等待提交</span><span class="badge">Idle</span></button>
+                    <button class="graph-node node-main" type="button" data-node="main" data-status="idle"><span class="node-kicker">Orchestrator</span><strong>主智能体</strong><span class="node-detail">尚未运行</span><span class="badge">Idle</span></button>
+                    <button class="graph-node node-network" type="button" data-node="network" data-status="idle"><span class="node-kicker">Conditional</span><strong>网络搜索</strong><span class="node-detail">未调用</span><span class="badge">Idle</span></button>
+                    <button class="graph-node node-database" type="button" data-node="database" data-status="idle"><span class="node-kicker">Conditional</span><strong>数据库查询</strong><span class="node-detail">未调用</span><span class="badge">Idle</span></button>
+                    <button class="graph-node node-knowledge" type="button" data-node="knowledge" data-status="idle"><span class="node-kicker">Conditional</span><strong>知识库</strong><span class="node-detail">未调用</span><span class="badge">Idle</span></button>
+                    <button class="graph-node node-synthesis" type="button" data-node="synthesis" data-status="unknown"><span class="node-kicker">Main Agent</span><strong>汇总回答</strong><span class="node-detail">无独立事件</span><span class="badge">Unknown</span></button>
+                    <button class="graph-node node-files" type="button" data-node="files" data-status="idle"><span class="node-kicker">Artifacts</span><strong>报告文件</strong><span class="node-detail">暂无文件</span><span class="badge">Idle</span></button>
+                    <button class="graph-node node-output" type="button" data-node="output" data-status="idle"><span class="node-kicker">Result</span><strong>最终结果</strong><span class="node-detail">等待完成</span><span class="badge">Idle</span></button>
+                    <div class="graph-empty" id="graph-empty">运行任务后将在这里显示真实执行状态</div>
+                  </div>
+                </div>
+              </div>
+              <button class="inspector-backdrop" id="inspector-backdrop" type="button" aria-label="关闭节点详情"></button>
+              <aside class="inspector-drawer" id="inspector-drawer" role="dialog" aria-modal="true"
+                     aria-labelledby="inspector-title" aria-hidden="true" inert>
+                <header class="inspector-header">
+                  <div><span class="eyebrow">Inspector</span><h2 id="inspector-title">Main Agent</h2></div>
+                  <div><span class="badge" id="inspector-status">Idle</span><button class="icon-button" id="close-inspector" type="button" aria-label="关闭节点详情" title="关闭节点详情"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+                </header>
+                <nav class="inspector-tabs" aria-label="详情分类">
+                  <button class="active" type="button" data-inspector-tab="overview">概览</button>
+                  <button type="button" data-inspector-tab="input">输入</button>
+                  <button type="button" data-inspector-tab="output">输出</button>
+                  <button type="button" data-inspector-tab="event">完整记录</button>
+                  <button type="button" data-inspector-tab="error">错误</button>
+                </nav>
+                <div class="inspector-body" id="inspector-body"></div>
+              </aside>
+            </div>
+          </section>
+
+          <section class="run-records bottom-panel" id="run-records" aria-labelledby="records-title">
+            <header class="records-header">
+              <div><span class="eyebrow">运行记录</span><h2 id="records-title">运行记录</h2></div>
+              <button class="records-collapse" id="records-collapse" type="button" aria-expanded="true">收起运行记录</button>
+            </header>
+            <nav class="bottom-tabs" aria-label="运行记录分类">
+              <button class="active" type="button" data-bottom-tab="events">调用记录 <span id="tab-event-count">0</span></button>
+              <button type="button" data-bottom-tab="report">最终报告</button>
+              <button type="button" data-bottom-tab="files">生成文件 <span id="tab-file-count">0</span></button>
+              <button type="button" data-bottom-tab="raw">原始数据</button>
+            </nav>
+            <div class="bottom-content" id="bottom-content">
+              <section class="tab-panel active" data-bottom-panel="events">
+                <div class="event-tools">
+                  <label><span class="sr-only">搜索调用记录</span><input id="event-search" name="event-search" type="search" placeholder="搜索调用记录…" autocomplete="off"></label>
+                  <label><span class="sr-only">按状态筛选</span><select id="event-status-filter" name="event-status-filter" autocomplete="off"><option value="all">全部状态</option><option value="running">运行中</option><option value="completed">已完成</option><option value="failed">失败</option></select></label>
+                </div>
+                <div class="call-records" id="events-list"><div class="empty-state">暂无调用记录</div></div>
+              </section>
+              <section class="tab-panel report-panel" data-bottom-panel="report"><div class="markdown-body" id="final-report"><div class="empty-state">运行完成后显示最终报告</div></div></section>
+              <section class="tab-panel" data-bottom-panel="files"><div class="files-list" id="files-list"><div class="empty-state">暂无生成文件</div></div></section>
+              <section class="tab-panel raw-panel" data-bottom-panel="raw"><pre id="raw-events">暂无 WebSocket 消息</pre></section>
+            </div>
+          </section>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div class="notice hidden" id="notice" role="status" aria-live="polite">
+    <span id="notice-text"></span><button type="button" id="dismiss-notice">关闭</button>
+  </div>
+  <script type="module" src="/static/app.js"></script>
+</body>
+</html>

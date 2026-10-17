@@ -58,6 +58,37 @@ class InMemoryTraceStore:
             return list(self._run_order)
         return [rid for rid in self._run_order if self._run_thread.get(rid) == thread_id]
 
+    def list_run_summaries(self, thread_id: str | None = None) -> list[dict]:
+        """返回 run 摘要（最新在前），供前端会话列表/恢复使用。
+
+        状态是从事件里"推导"出来的，不额外存：
+        - 有 run_completed → completed
+        - 有 run_failed     → failed
+        - 否则              → running
+        时间取首尾事件的 timestamp。
+        """
+        summaries = []
+        for rid in reversed(self._run_order):      # 最新在前：前端默认取 runs[0]
+            if thread_id is not None and self._run_thread.get(rid) != thread_id:
+                continue
+            events = self._events.get(rid, [])
+            status = "running"
+            ended_at = None
+            for event in reversed(events):
+                name = event.event.value
+                if name in ("run_completed", "run_failed"):
+                    status = "completed" if name == "run_completed" else "failed"
+                    ended_at = event.timestamp
+                    break
+            summaries.append({
+                "run_id": rid,
+                "status": status,
+                "started_at": events[0].timestamp if events else None,
+                "ended_at": ended_at,
+                "event_count": len(events),
+            })
+        return summaries
+
     def _evict_runs_if_needed(self) -> None:
         """run 总数超上限：淘汰最早出现的 run。"""
         while len(self._run_order) > self.max_runs:

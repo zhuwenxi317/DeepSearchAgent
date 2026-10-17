@@ -21,6 +21,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 from fastapi import FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from api.connection_manager import manager
@@ -31,9 +32,25 @@ from api.trace_store import trace_store
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 OUTPUT_DIR = (PROJECT_ROOT / "output").resolve()
+WEB_DIR = (PROJECT_ROOT / "web").resolve()
 
 app = FastAPI(title="DeepSearchPro API")
 app.include_router(trace_router)
+
+# 静态资源（css/js）走 /static/*。零构建：浏览器直接加载源文件。
+app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
+
+
+@app.get("/", include_in_schema=False)
+async def index_page():
+    """聊天页。"""
+    return FileResponse(WEB_DIR / "index.html")
+
+
+@app.get("/trace", include_in_schema=False)
+async def trace_page():
+    """轨迹页。"""
+    return FileResponse(WEB_DIR / "trace.html")
 
 # CORS：允许浏览器从其它源（端口）访问本服务。开发期放开，生产要收紧成白名单。
 app.add_middleware(
@@ -175,6 +192,7 @@ async def execute_deep_agent(query: str, thread_id: str, run_id: str, session_di
             thread_id=thread_id, run_id=run_id,
             event=TraceEventType.RUN_STARTED,
             entity_id=run_entity_id, name="main",
+            data={"query": query},   # 供前端刷新恢复时还原用户提问
         ))
         await monitor.emit(TraceEvent(
             thread_id=thread_id, run_id=run_id,
@@ -237,6 +255,7 @@ async def execute_deep_agent(query: str, thread_id: str, run_id: str, session_di
             thread_id=thread_id, run_id=run_id,
             event=TraceEventType.RUN_COMPLETED,
             entity_id=run_entity_id, name="main",
+            output=final_text or None,   # 前端聊天页直接渲染这段文本
         ))
 
         await emit("任务完成")
@@ -293,13 +312,15 @@ async def list_files(thread_id: str):
     files = []
     for p in sorted(session_dir.rglob("*")):
         if p.is_file():
+            st = p.stat()
             files.append(
                 {
                     "name": p.name,
                     # 相对【会话目录】的路径，可以直接喂给 /api/download 的 path 参数
                     # （不暴露服务器绝对路径，也不含 session_xxx/ 前缀）
                     "path": p.relative_to(session_dir).as_posix(),
-                    "size": p.stat().st_size,
+                    "size": st.st_size,
+                    "mtime": st.st_mtime,
                 }
             )
     return {"thread_id": thread_id, "files": files}

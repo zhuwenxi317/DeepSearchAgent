@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#f6f7f8">
+  <meta name="description" content="DeepSearchPro 深度研究助手">
+  <title>DeepSearchPro</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main-content">跳到对话内容</a>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar" aria-label="会话导航">
+      <div class="sidebar-brand">
+        <a class="brand" href="/" aria-label="DeepSearchPro 首页">
+          <span class="brand-mark" aria-hidden="true">DS</span>
+          <span>
+            <strong>DeepSearchPro</strong>
+            <small>Research workspace</small>
+          </span>
+        </a>
+        <button class="icon-button mobile-only" id="close-sidebar" type="button"
+                aria-label="关闭会话导航" title="关闭会话导航">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <button class="new-session-button" id="new-session" type="button">
+        <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+        <span>新建对话</span>
+      </button>
+
+      <label class="session-search" for="session-search">
+        <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <input id="session-search" name="session-search" type="search" placeholder="搜索会话…" autocomplete="off">
+      </label>
+
+      <div class="sidebar-section-label">最近对话</div>
+      <nav id="session-list" class="session-list" aria-label="最近对话"></nav>
+
+      <a class="sidebar-trace-link" href="/trace">
+        <svg aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 16V9m5 7V6m5 10v-4"/></svg>
+        <span>运行追踪</span>
+        <svg class="trailing-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
+      </a>
+    </aside>
+
+    <button class="sidebar-backdrop" id="sidebar-backdrop" type="button"
+            aria-label="关闭会话导航" title="关闭会话导航"></button>
+
+    <main class="chat-workspace" id="main-content">
+      <header class="topbar">
+        <div class="topbar-title">
+          <button class="icon-button mobile-only" id="open-sidebar" type="button"
+                  aria-label="打开会话导航" title="打开会话导航">
+            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+          </button>
+          <div>
+            <h1 id="thread-title">新对话</h1>
+            <code id="thread-id"></code>
+          </div>
+        </div>
+        <div class="topbar-actions">
+          <span class="connection-label" id="connection-label" aria-live="polite" data-status="idle">
+            <i aria-hidden="true"></i>
+            <span>未开始</span>
+          </span>
+          <button class="icon-button" id="copy-thread" type="button"
+                  aria-label="复制线程 ID" title="复制线程 ID">
+            <svg aria-hidden="true" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          </button>
+          <a id="trace-link" class="trace-button" href="/trace" aria-disabled="true">
+            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 19V9m5 10V5m5 14v-7m5 7V3"/></svg>
+            <span>运行详情</span>
+          </a>
+        </div>
+      </header>
+
+      <section id="messages" class="message-stream" aria-live="polite" aria-label="对话内容">
+        <div id="empty-state" class="chat-empty">
+          <div class="empty-mark" aria-hidden="true">DS</div>
+          <h2>今天想了解什么？</h2>
+          <p>输入一个问题，我会搜索网络并整理成报告</p>
+        </div>
+        <div id="conversation" class="conversation"></div>
+      </section>
+
+      <button class="scroll-to-latest hidden" id="scroll-to-latest" type="button"
+              aria-label="回到最新消息" title="回到最新消息">
+        <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+
+      <form id="composer" class="composer">
+        <div id="queued-files" class="queued-files" aria-live="polite"></div>
+        <label class="sr-only" for="task-input">输入问题</label>
+        <textarea id="task-input" name="query" rows="3" maxlength="12000" autocomplete="off"
+                  placeholder="输入你的研究问题…"></textarea>
+        <div class="composer-actions">
+          <div class="composer-tools">
+            <input id="file-input" name="files" type="file" multiple hidden>
+            <button class="icon-button" id="attach-button" type="button"
+                    aria-label="添加附件" title="添加附件">
+              <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m21.4 11.6-8.9 8.9a6 6 0 0 1-8.5-8.5l9.6-9.6a4 4 0 0 1 5.7 5.7l-9.6 9.6a2 2 0 0 1-2.8-2.8l8.9-8.9"/></svg>
+            </button>
+            <span id="composer-status" class="composer-status">就绪</span>
+          </div>
+          <button class="send-button" id="send-button" type="submit"
+                  aria-label="发送问题" title="发送问题">
+            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
+          </button>
+        </div>
+      </form>
+    </main>
+  </div>
+
+  <div id="notice" class="notice hidden" role="status" aria-live="polite">
+    <span id="notice-text"></span>
+    <button id="dismiss-notice" type="button">关闭</button>
+  </div>
+
+  <script type="module" src="/static/chat.js"></script>
+</body>
+</html>

@@ -75,11 +75,12 @@ async def main():
         assert all(e["sequence"] > after_seq for e in inc_events), "增量拉取返回了不该有的旧事件"
         print(f"⑤ after_sequence={after_seq} → 增量返回 {len(inc_events)} 条，全部序号 > {after_seq}")
 
-        # ⑥ 按 thread 查 runs
+        # ⑥ 按 thread 查 runs（现在是摘要对象，最新在前）
         runs = await client.get(f"{BASE}/api/threads/{thread_id}/runs")
         runs.raise_for_status()
         run_list = runs.json()["runs"]
-        assert run_id in run_list, f"{run_id} 不在 {run_list} 里"
+        run_ids = [r["run_id"] if isinstance(r, dict) else r for r in run_list]
+        assert run_id in run_ids, f"{run_id} 不在 {run_ids} 里"
         print(f"⑥ 该 thread 的 runs：{run_list}")
 
     print("\n✅ M8 Step 6a 通过：查询接口正确")

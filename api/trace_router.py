@@ -16,8 +16,8 @@ router = APIRouter(prefix="/api")
 
 @router.get("/threads/{thread_id}/runs")
 async def list_runs(thread_id: str):
-    """列出某个会话下执行过的 run（按首次出现顺序）。"""
-    runs = trace_store.list_runs(thread_id)
+    """列出某个会话下执行过的 run（最新在前，带状态和时间）。"""
+    runs = trace_store.list_run_summaries(thread_id)
     return {"thread_id": thread_id, "runs": runs}
 
 
