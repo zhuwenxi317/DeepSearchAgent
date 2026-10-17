@@ -12,7 +12,7 @@
     ① "给我找出所有在等 A 号任务消息的连接"  → 翻第一层，O(1) 定位到组
     ② "某条连接断了，从名册上划掉"           → 翻第二层，精确删除
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from fastapi import WebSocket
@@ -24,6 +24,16 @@ class ConnectionState:
 
     websocket: WebSocket
     run_id: Optional[str] = None
+
+    # ── replay 竞态的解法 ──────────────────────────────────────────
+    # 补历史期间，实时广播【不能直接写出去】，否则会和补发的事件交错/重复。
+    # 所以先标记 replaying=True，把新事件临时堆进 pending；
+    # 历史发完后，再把 pending 按 sequence 排序、按 event_id 去重补发。
+    #
+    # 为什么按连接各存一份？每条连接的 replay 进度不同，
+    # 全局一份会把 A 连接中转期的事件塞给 B 连接。
+    replaying: bool = False
+    pending: list[dict[str, Any]] = field(default_factory=list)
 
 
 class ConnectionManager:
@@ -58,7 +68,12 @@ class ConnectionManager:
 
         # 拷贝一份(list)再遍历：下面失败时会从字典里删元素，
         # 直接遍历原字典会抛 RuntimeError: dictionary changed size during iteration
-        for websocket, _state in list(group.items()):
+        for websocket, state in list(group.items()):
+            # ★ 中转期：不直接发，先排队。等这条连接把历史补完再统一发。
+            #   这里只是 list.append（同步、无 await），不会和 replay 循环交错出乱序。
+            if state.replaying:
+                state.pending.append(event)
+                continue
             try:
                 await websocket.send_json(event)
             except Exception as e:

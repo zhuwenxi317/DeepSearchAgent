@@ -27,6 +27,7 @@ from api.connection_manager import manager
 from api.monitor import monitor
 from api.trace_models import TraceEvent, TraceEventType
 from api.trace_router import router as trace_router
+from api.trace_store import trace_store
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 OUTPUT_DIR = (PROJECT_ROOT / "output").resolve()
@@ -340,13 +341,42 @@ async def upload_file(thread_id: str, file: UploadFile = File(...)):
     return {"status": "uploaded", "filename": safe_name, "size": size}
 
 
+async def _flush_pending(websocket, state, run_id: str, seen_ids: set[str]) -> int:
+    """把 replay 中转期攒下的事件发出去：按 sequence 排序 + 按 event_id 去重。
+
+    用 while 而不是单次 for：发送过程中还会不断有新事件进来，
+    必须吸到 pending 空为止（每次先原子地换出一个新列表再遍历）。
+
+    返回实际发出的条数。
+    """
+    flushed = 0
+    while True:
+        batch = state.pending
+        state.pending = []          # 原子换出：之后到达的事件进新列表
+        if not batch:
+            break
+        # 同一 run 的按 sequence 排前面，其它 run 的排后面（各自保持到达序）
+        for payload in sorted(
+            batch, key=lambda ev: (ev.get("run_id") != run_id, ev.get("sequence", 0))
+        ):
+            event_id = payload.get("event_id")
+            # ★ 只有 trace 事件才有 event_id。进度消息(type=progress)没有，
+            #   不能参与去重——否则第二条进度会因为 None 已存在而被误丢。
+            if event_id is not None:
+                if event_id in seen_ids:
+                    continue                 # 历史里已经发过 → 重发，跳过
+                seen_ids.add(event_id)
+            await websocket.send_json(payload)
+            flushed += 1
+    return flushed
+
+
 @app.websocket("/ws/{thread_id}")
 async def websocket_endpoint(
     websocket: WebSocket,
     thread_id: str,
     run_id: Optional[str] = None,
     # 断线重连时带上"我最后收到的事件序号"，后端补发之后的历史。
-    # M7 先留出这个参数（前端契约），补发逻辑在 M8 有了事件存储之后实现。
     after_sequence: int = 0,
 ):
     """前端连上这条长连接，就能实时收到这个 thread 的进度。
@@ -354,10 +384,34 @@ async def websocket_endpoint(
     这个函数【不会立刻返回】——它一直挂在 receive_text() 上等客户端说话，
     直到客户端断开才结束。这是 WebSocket 端点与 HTTP 端点最大的写法差别。
     """
-    await manager.connect(websocket, thread_id, run_id)
-    print(f"[WS] {thread_id} 已连接（run_id={run_id}）")
+    state = await manager.connect(websocket, thread_id, run_id)
+    # ★ 立刻进中转模式（connect 返回到这一行之间没有 await，不会漏掉广播）。
+    #   此后新事件只入 pending，避免和补历史交错。
+    if run_id:
+        state.replaying = True
+    print(f"[WS] {thread_id} 已连接（run_id={run_id}, after_sequence={after_sequence}）")
 
     try:
+        # 断线重连补历史：带了 run_id 就先把漏掉的事件补发，再进入实时循环。
+        # 格式和实时广播一致（model_dump(mode="json")），前端无需区分来源。
+        if run_id:
+            history = trace_store.list_events(run_id, after_sequence=after_sequence)
+            seen_ids: set[str] = set()
+            for event in history:
+                payload = event.model_dump(mode="json")
+                seen_ids.add(payload["event_id"])
+                await websocket.send_json(payload)
+            if history:
+                print(f"[WS] {thread_id} 补发 {len(history)} 条历史（after_sequence={after_sequence}）")
+
+            # 补发中转期攒下的事件：按 sequence 排序、按 event_id 去重。
+            flushed = await _flush_pending(websocket, state, run_id, seen_ids)
+            if flushed:
+                print(f"[WS] {thread_id} 补发中转期事件 {flushed} 条")
+
+            # 到这里 pending 为空且无 await 间隙 → 切回实时广播，不会漏
+            state.replaying = False
+
         while True:
             # 挂在这里等客户端发消息。它同时也是"保持连接活着"的机制：
             # 客户端定时发 ping，我们回 pong，中间的代理/防火墙才不会掐断长连接。
@@ -368,6 +422,8 @@ async def websocket_endpoint(
         print(f"[WS] {thread_id} 已断开")
     finally:
         # 不管正常断开还是异常退出，都要从名册上摘掉（disconnect 是幂等的）
+        state.replaying = False
+        state.pending.clear()
         manager.disconnect(thread_id, websocket)
 
 
