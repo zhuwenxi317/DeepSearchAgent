@@ -11,7 +11,16 @@ from api.monitor import monitor
 # 确保读到 .env 里的 TAVILY_API_KEY
 load_dotenv(find_dotenv())
 
-tavily_client = TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
+# 延迟构造：TavilyClient 在 __init__ 里就校验 key，
+# 放在模块顶部会让"缺 key 时导入工具"直接抛异常，连降级的机会都没有。
+_tavily_client = None
+
+
+def _get_client() -> TavilyClient:
+    global _tavily_client
+    if _tavily_client is None:
+        _tavily_client = TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
+    return _tavily_client
 
 
 # on_error="return"：key 失效/网络故障时，把错误当成工具结果交给模型，
@@ -34,7 +43,7 @@ def internet_search(
         max_results: 返回结果的最大条数。
         include_raw_content: 是否返回网页原文（False 只要摘要，True 要全文）。
     """
-    return tavily_client.search(
+    return _get_client().search(
         query=query,
         topic=topic,
         max_results=max_results,

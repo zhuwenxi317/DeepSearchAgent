@@ -11,6 +11,7 @@ import asyncio
 import re
 import sys
 import uuid
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
@@ -24,6 +25,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from api.config import check_startup_config
 from api.connection_manager import manager
 from api.monitor import monitor
 from api.trace_models import TraceEvent, TraceEventType
@@ -34,7 +36,18 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 OUTPUT_DIR = (PROJECT_ROOT / "output").resolve()
 WEB_DIR = (PROJECT_ROOT / "web").resolve()
 
-app = FastAPI(title="DeepSearchPro API")
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """进程启动时校验配置：必需项缺失就直接退出，可选项缺失只告警。"""
+    try:
+        check_startup_config()
+    except RuntimeError as exc:
+        print(f"\n{exc}\n", flush=True)
+        raise
+    yield
+
+
+app = FastAPI(title="DeepSearchPro API", lifespan=lifespan)
 app.include_router(trace_router)
 
 # 静态资源（css/js）走 /static/*。零构建：浏览器直接加载源文件。
