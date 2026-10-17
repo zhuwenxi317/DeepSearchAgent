@@ -5,6 +5,7 @@ from agent.llm import model
 from agent.prompts import main_agent_content
 from agent.subagents.network_search_agent import build_network_search_agent
 from tools.markdown_tools import generate_markdown
+from tools.pdf_tools import convert_md_to_pdf
 
 # 能力按配置注册：缺 TAVILY_API_KEY 时 build_* 返回 None，直接跳过。
 # 这样主智能体的工具列表和提示词都不会提到一个不存在的能力。
@@ -24,7 +25,7 @@ if not _subagents:
 main_agent = create_deep_agent(
     model=model,
     system_prompt=_system_prompt,
-    tools=[generate_markdown],
+    tools=[generate_markdown, convert_md_to_pdf],
     checkpointer=InMemorySaver(),
     subagents=_subagents,
 )
