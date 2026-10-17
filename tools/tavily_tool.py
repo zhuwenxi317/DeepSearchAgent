@@ -14,7 +14,9 @@ load_dotenv(find_dotenv())
 tavily_client = TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
 
 
-@monitor.traced_tool("网络搜索工具")
+# on_error="return"：key 失效/网络故障时，把错误当成工具结果交给模型，
+# 让它基于已有信息作答，而不是让整个 run 崩掉。
+@monitor.traced_tool("网络搜索工具", on_error="return")
 @tool
 def internet_search(
     query: str,
