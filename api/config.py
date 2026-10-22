@@ -20,6 +20,8 @@ REQUIRED_CONFIG = {
     "OPENAI_API_KEY": "LLM 的 API Key",
 }
 
+MYSQL_REQUIRED = ("MYSQL_USER", "MYSQL_PASSWORD", "MYSQL_DATABASE")
+
 
 def check_startup_config() -> list[str]:
     """检查配置。返回警告列表；必需项缺失时抛 RuntimeError。"""
@@ -43,6 +45,11 @@ def check_startup_config() -> list[str]:
         )
     if not os.getenv("TAVILY_API_KEY"):
         warnings.append("未配置 TAVILY_API_KEY，网络搜索助手已禁用")
+    if not has_database():
+        warnings.append(
+            "MySQL 配置不完整（MYSQL_USER / MYSQL_PASSWORD / MYSQL_DATABASE），"
+            "数据库查询助手已禁用"
+        )
 
     for warning in warnings:
         print(f"[配置警告] {warning}", flush=True)
@@ -51,3 +58,7 @@ def check_startup_config() -> list[str]:
 
 def has_tavily() -> bool:
     return bool(os.getenv("TAVILY_API_KEY"))
+
+
+def has_database() -> bool:
+    return all(os.getenv(key) for key in MYSQL_REQUIRED)

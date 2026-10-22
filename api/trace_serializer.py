@@ -38,7 +38,7 @@ def sanitize_for_trace(obj: Any, depth: int = 0) -> Any:
     if isinstance(obj, dict):
         result = {}
         for key, value in obj.items():
-            key_lower = str(key).lower()
+            key_lower = str(key).lower().replace("-", "_")
             if any(pattern in key_lower for pattern in SENSITIVE_KEY_PATTERNS):
                 result[key] = REDACTED          # 敏感字段：整段打码，不递归
             else:
